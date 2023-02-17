@@ -1,82 +1,104 @@
-# Default values for keycloak-helm.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+postgresql:
+  auth:
+    username: keycloak
+    password: keycloak
+  primary:
+    persistence:
+      size: 4Gi
 
-replicaCount: 1
+keycloak:
+  replicaCount: 2
+  auth:
+    adminUser: keycloak
+    adminPassword: keycloak
 
-image:
-  repository: nginx
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  extraEnv: |
+    - name: KEYCLOAK_ADMIN
+      value: keycloak
+    - name: KEYCLOAK_ADMIN_PASSWORD
+      value: keycloak
+    - name: KC_PROXY
+      value: "passthrough"
+    - name: JAVA_OPTS_APPEND
+      value: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=80.0
+        -Djava.awt.headless=true
+        -Djgroups.dns.query={{ include "keycloak.fullname" . }}-headless
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+  sidecars: |
+    - name: keycloak-migrations
+      image: klg71/keycloakmigration
+      env:
+      - name: ADMIN_USER
+        value: keycloak
+      - name: ADMIN_PASSWORD
+        value: keycloak
+      - name: BASEURL
+        value: http://localhost:8080
+      - name: KEYCLOAK_CHANGELOG
+        value: /migration/keycloak-changelog.yaml
+      - name: WAIT_FOR_KEYCLOAK
+        value: "true"
+      - name: STAY_IDLE
+        value: "true"
+      volumeMounts:
+        - name: migrations
+          mountPath: /migration
+          readOnly: true
 
-serviceAccount:
-  # Specifies whether a service account should be created
-  create: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  extraVolumes: |
+    - name: migrations
+      configMap:
+        name: keycloak-migrations
 
-podAnnotations: {}
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    pathType: Prefix
+    path: "/"
+    hostname: keycloak.k8s.ingress
 
-podSecurityContext: {}
-  # fsGroup: 2000
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    requests:
+      memory: 386Mi
+      cpu: 250m
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-service:
-  type: ClusterIP
-  port: 80
-
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
-
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
+migrations:
+  - id: "M001-20221219"
+    author: najee89b
+    changes:
+      - addRealm:
+          id: najeeb
+          name: najeeb
+          enabled: true
+  - id: "M002-20221219"
+    author: najee89b
+    changes:
+      - addSimpleClient:
+          realm: najeeb
+          clientId: todo-app
+          enabled: true
+          publicClient: true
+      - updateClient:
+          realm: najeeb
+          clientId: todo-app
+          enabled: true
+          directAccessGrantEnabled: false
+          redirectUris:
+            - http://localhost:8080/
+            - http://localhost:3000/
+            - http://localhost:5000/
+            - http://localhost:5173/
+          webOrigins:
+            - http://localhost:8080
+            - http://localhost:3000
+            - http://localhost:5000
+            - http://localhost:5173
+          attributes:
+            'pkce.code.challenge.method': 'S256'
+            'client.session.idle.timeout': '120'
+            'access.token.lifespan': '60'
