@@ -8,8 +8,11 @@ Helm Repo based ontop of [Bitnami Keycloak](https://github.com/bitnami/charts/tr
 
 ### How to use ?
 1. Clone this repo 
-2. edit / create new values file
-3.
+2. Edit / create new values file
+3. Install helm chart
+
+ex:
+
 ```sh
 git clone https://github.com/najeeb-rifaat/keycloak-helm`
 cd keycloak-helm
